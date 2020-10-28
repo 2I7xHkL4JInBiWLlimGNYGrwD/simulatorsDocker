@@ -1,0 +1,62 @@
+# Copyright 2017 Andrey Rodchenko, School of Computer Science, The University of Manchester
+# 
+# This code is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 2 only, as
+# published by the Free Software Foundation.
+#                                                                          
+# This code is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+# version 2 for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <http://www.gnu.org/licenses/>.
+#
+_LOCK_ACQUIRED=0
+function removeDeadLock {
+    if [ -d $SINGLE_INSTANCE_LOCK_DIR ] ; then
+        if [ $(pidof -x -o $$ $1 | wc -w) -eq 1 ] ; then
+            rmdir $SINGLE_INSTANCE_LOCK_DIR
+        fi
+    fi
+}
+
+function isSingleInstanceTest {
+    _SINGLE_INSTANCE_TESTS_NUM=${#SINGLE_INSTANCE_TESTS[@]}
+    _LAST_K=$((_SINGLE_INSTANCE_TESTS_NUM-1))
+    for k in $(seq 0 $_LAST_K) ; do
+        if [ ${SINGLE_INSTANCE_TESTS[k]} == $1 ] ; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+function acquireLock {
+    if isSingleInstanceTest $1 ; then
+        until mkdir $SINGLE_INSTANCE_LOCK_DIR
+        do
+            echo "Single instance test lock acquired. Will try again in 60 seconds ..."
+            sleep 60
+        done
+        _LOCK_ACQUIRED=1
+    fi
+}
+
+function releaseLock {
+    if isSingleInstanceTest $1 ; then
+        if [ $_LOCK_ACQUIRED -eq 1 ] ; then
+            _LOCK_ACQUIRED=0
+            rmdir $SINGLE_INSTANCE_LOCK_DIR
+        fi
+    fi
+}
+
+trap ctrl_c_handler INT
+function ctrl_c_handler {
+    if [ $_LOCK_ACQUIRED -eq 1 ] ; then
+        _LOCK_ACQUIRED=0
+        rmdir $SINGLE_INSTANCE_LOCK_DIR
+    fi
+}
+
